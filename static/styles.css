@@ -1,0 +1,31 @@
+.a_class {
+  color: black;
+  text-decoration: none;
+}
+
+.a_class:hover {
+  color: rgb(201, 120, 15);
+}
+
+.page-link {
+  color: rgb(201, 120, 15);
+}
+
+.page-item.active .page-link {
+  background-color: transparent;
+  border-color: transparent;
+  color: rgb(201, 120, 15);
+}
+
+.page-link:hover {
+    color: rgb(201, 120, 15);
+}
+
+a {
+  color: black;
+  text-decoration: none;
+}
+
+a:hover {
+  color: rgb(201, 120, 15);
+}
