@@ -1,5 +1,5 @@
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app
-from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from datetime import datetime
 from flask_migrate import Migrate
 from flask_wtf import FlaskForm
@@ -8,9 +8,10 @@ from wtforms import StringField, PasswordField, BooleanField, SubmitField, Decim
 from wtforms.validators import DataRequired, Length, NumberRange
 from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
+import hashlib
 import os
 from config import Config
-from models import db, User, Equipment, Category, Photo
+from models import db, User, Equipment, Category, Photo, Role
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -28,6 +29,11 @@ login_manager.login_message = "Для выполнения данного дей
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 class LoginForm(FlaskForm):
     username = StringField('Имя пользователя', validators=[DataRequired(), Length(min=4, max=20)])
@@ -43,9 +49,25 @@ class EquipmentForm(FlaskForm):
     purchase_date = DateField('Дата покупки', validators=[DataRequired()])
     cost = DecimalField('Стоимость', validators=[DataRequired(), NumberRange(min=0)])
     status = SelectField('Статус', choices=[('В эксплуатации', 'В эксплуатации'), ('На ремонте', 'На ремонте'), ('Списано', 'Списано')], validators=[DataRequired()])
-    photo_id = SelectField('Фотография', coerce=int, choices=[], validators=[])
+    photo = FileField('Фото', validators=[FileAllowed(ALLOWED_EXTENSIONS)]) 
     new_photo = FileField('Загрузить новую фотографию', validators=[FileAllowed(['jpg', 'jpeg', 'png', 'gif'])])
     submit = SubmitField('Сохранить')
+
+
+def generate_md5(filename):
+    """Генерирует MD5 хэш для указанного файла."""
+    md5_hash = hashlib.md5()
+    try:
+        with open(filename, "rb") as f:  # Открываем файл в бинарном режиме
+            for chunk in iter(lambda: f.read(4096), b""):  # 4096 байт - размер чанка
+                md5_hash.update(chunk)
+        return md5_hash.hexdigest()  # Возвращаем хэш в шестнадцатеричном формате
+    except FileNotFoundError:
+        print(f"Файл не найден: {filename}")
+        return None
+    except Exception as e:
+        print(f"Ошибка при чтении файла: {e}")
+        return None
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -135,10 +157,6 @@ def index():
                            )
 
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
-
-
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_equipment():
@@ -180,10 +198,74 @@ def add_equipment():
         return redirect(url_for('index'))
 
 
+@app.route('/delete/<int:equipment_id>', methods=['POST'])
+@login_required
+def equipment_delete(equipment_id):
+    if current_user.role.name != 'admin':
+        flash('У вас недостаточно прав для выполнения данного действия.', 'danger')
+        return redirect(url_for('index'))
+
+    equipment = Equipment.query.get_or_404(equipment_id)
+    db.session.delete(equipment)
+    db.session.commit()
+    flash('Оборудование успешно удалено.', 'success')
+    return redirect(url_for('index')) 
+
+
+@app.route('/equipment/<int:equipment_id>')
+def equipment_detail(equipment_id):
+    equipment = Equipment.query.get_or_404(equipment_id)
+    return render_template('equipment_detail.html', equipment=equipment)
+
+
+@app.route('/equipment/<int:equipment_id>/add_maintenance_log', methods=['POST'])
+def add_maintenance_log(equipment_id):
+    equipment = Equipment.query.get_or_404(equipment_id)
+    comment = request.form.get('comment')
+
+    if comment:
+        new_log = MaintenanceLog(equipment_id=equipment_id, comment=comment)
+        db.session.add(new_log)
+        db.session.commit()
+
+    return redirect(url_for('equipment_detail', equipment_id=equipment_id))
+
+
+@app.route('/fill_db')
+def fill_db():
+    with app.app_context():
+        admin_role = Role(name='admin', description='Администратор')
+        db.session.add(admin_role)
+        user_role = Role(name='user', description='Пользователь')
+        db.session.add(user_role)
+        tech_role = Role(name='tech', description='Тех')
+        db.session.add(tech_role)
+
+        admin = User(username='admin1', role=admin_role)
+        admin.set_password('str0ng_p@ssWORD371')
+        db.session.add(admin)
+
+        user = User(username='Vasya', role=user_role)
+        user.set_password('beer_in_hand-m4t_0n_bOaRd')
+        db.session.add(user)
+
+        user = User(username='user', role=user_role)
+        user.set_password('who-IS-it?9')
+        db.session.add(user)
+
+        tech = User(username='user3', role=tech_role)
+        user.set_password('йцукенгшщзх757575')
+        db.session.add(user)
+
+        db.session.commit()
+
+    return "БД заполнена"
+
+
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def edit_equipment(id):
-    if current_user.role != 'admin':
+    if current_user.role.name != 'admin':
         flash('У вас недостаточно прав для выполнения данного действия', 'danger')
         return redirect(url_for('index'))
     
@@ -199,18 +281,37 @@ def edit_equipment(id):
         equipment.cost = form.cost.data
         equipment.status = form.status.data
 
-        # Обработка загрузки фотографии
-        if 'photo' in request.files:
-            file = request.files['photo']
-            if file and allowed_file(file.filename):
-                if equipment.photo:
-                    try:
-                        os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], equipment.photo))
-                    except FileNotFoundError:
-                        pass
-                filename = secure_filename(file.filename)
-                file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
-                equipment.photo = filename
+        if form.photo.data:  # Проверяем, был ли загружен файл
+            file = form.photo.data
+            filename = secure_filename(file.filename)
+            # Генерируем уникальное имя файла
+            timestamp = int(datetime.now().timestamp())
+            new_filename = f"{timestamp}_{filename}"
+            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], new_filename)
+            # Вычисляем MD5-хеш
+            md5_hash = generate_md5(filepath)
+            # Проверяем, существует ли уже файл с таким хешем
+            existing_photo = Photo.query.filter_by(md5_hash=md5_hash).first()
+            if existing_photo:
+
+                equipment.photo_id = existing_photo.id
+                try: 
+                    os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], equipment.photo))
+                except:
+                    pass
+            else:
+                file.save(filepath)
+                photo = Photo(filename=new_filename, mime_type=file.mimetype, md5_hash=md5_hash)
+                db.session.add(photo)
+                db.session.commit()
+
+                equipment.photo_id = photo.id
+                try:
+                    os.remove(os.path.join(current_app.config['UPLOAD_FOLDER'], equipment.photo))
+                except:
+                    pass
+            equipment.photo = new_filename
+
         db.session.commit()
         flash('Оборудование успешно обновлено!', 'success')
         return redirect(url_for('index'))
@@ -218,8 +319,10 @@ def edit_equipment(id):
     return render_template('edit.html', form=form, equipment=equipment)
 
 
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
+@app.route('/uploads/<filename>')
+def show_image(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

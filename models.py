@@ -7,12 +7,21 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+class Role(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.String(255))  
+
+    def __repr__(self):
+        return f'<Role {self.name}>'
+
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)  # Храним хэш пароля
-    role = db.Column(db.String(20), default='user')  # admin, tech, user
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey('role.id'))
+    role = db.relationship('Role', backref=db.backref('users_list', lazy=True))
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -79,7 +88,7 @@ class Person(db.Model):
         return f'<Person {self.full_name}>'
 
 
-class Maintenance(db.Model):
+class MaintenanceLog(db.Model):
     id = Column(Integer, primary_key=True)
     equipment_id = Column(Integer, ForeignKey('equipment.id'), nullable=False)
     equipment = relationship("Equipment", backref="maintenances")
@@ -89,3 +98,4 @@ class Maintenance(db.Model):
 
     def __repr__(self):
         return f'<Maintenance {self.date}>'
+

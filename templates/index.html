@@ -30,7 +30,7 @@
         <thead>
             <tr>
                 <th><a href="?page={{ pagination.page }}&sort_by=name&sort_order={% if sort_by == 'name' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Название</a></th>
-                <th><a href="?page={{ pagination.page }}&sort_by=inventory_number&sort_order={% if sort_by == 'inventory_number' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Инвентарный номер</a></th>
+                <th><a href="?page={{ pagination.page }}&sort_by=inventory_number&sort_order={% if sort_by == 'inventory_number' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Номер</a></th>
                 <th><a href="?page={{ pagination.page }}&sort_by=category&sort_order={% if sort_by == 'category' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Категория</a></th>
                 <th><a href="?page={{ pagination.page }}&sort_by=status&sort_order={% if sort_by == 'status' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Статус</a></th>
                 <th><a href="?page={{ pagination.page }}&sort_by=purchase_date&sort_order={% if sort_by == 'purchase_date' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Дата покупки</a></th>
@@ -46,18 +46,44 @@
                     <td>{{ equipment.status }}</td>
                     <td>{{ equipment.purchase_date.strftime('%Y-%m-%d') }}</td>
                     <td>
-                        <a href="#">Просмотр</a> <!-- Replace '#' with actual URL -->
-                        {% if current_user.role == 'admin' %}
-                            <a href="{{ url_for('edit_equipment', id=equipment.id) }}">Редактировать</a>
-                            <a href="#">Удалить</a> <!-- Replace '#' with actual URL -->
-                        {% elif current_user.role == 'tech' %}
-                            <a href="#">Добавить запись об обслуживании</a> <!-- Replace '#' with actual URL -->
+                        <a href="{{ url_for('equipment_detail', equipment_id=equipment.id) }}" class="btn btn-outline-primary btn-sm" title="Просмотр">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        {% if current_user.is_authenticated and current_user.role.name == 'admin' or 'tech' %}
+                            <a href="{{ url_for('edit_equipment', id=equipment.id) }}" class="btn btn-outline-warning btn-sm" title="Редактировать">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal{{ equipment.id }}" title="Удалить">
+                                <i class="bi bi-trash"></i>
+                            </button>
                         {% endif %}
                     </td>
                 </tr>
             {% endfor %}
         </tbody>
     </table>
+    {% for equipment in equipments %}
+        <!-- Модальное окно для удаления оборудования -->
+        <div class="modal fade" id="deleteModal{{ equipment.id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ equipment.id }}" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="deleteModalLabel{{ equipment.id }}">Подтверждение удаления</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        Вы уверены, что хотите удалить оборудование <strong>{{ equipment.name }}</strong>?
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <form action="{{ url_for('equipment_delete', equipment_id=equipment.id) }}" method="POST">
+                            <button type="submit" class="btn btn-danger">Удалить</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
 
     {% if pagination.total > pagination.per_page %}
         <div class="pagination">
