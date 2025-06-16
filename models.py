@@ -1,17 +1,14 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Enum
+from sqlalchemy import Enum, DateTime, func, Column, Integer, String, ForeignKey, Numeric, Date, Text
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, SubmitField
-from wtforms.validators import DataRequired, Length
+from datetime import datetime
 
 db = SQLAlchemy()
 
 
-class User(UserMixin, db.Model):  # UserMixin для flask_login
+class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)  # Храним хэш пароля
@@ -25,13 +22,6 @@ class User(UserMixin, db.Model):  # UserMixin для flask_login
 
     def __repr__(self):
         return f'<User {self.username}>'
-
-
-class LoginForm(FlaskForm):
-    username = StringField('Имя пользователя', validators=[DataRequired(), Length(min=4, max=20)])
-    password = PasswordField('Пароль', validators=[DataRequired()])
-    remember_me = BooleanField('Запомнить меня')
-    submit = SubmitField('Войти')
 
 
 class Category(db.Model):
@@ -48,16 +38,27 @@ class Equipment(db.Model):
     name = db.Column(db.String(255), nullable=False)
     inventory_number = db.Column(db.String(50), unique=True, nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
-    category = relationship("Category", backref="equipment") #связь с категорией
+    category = relationship("Category", backref="equipment")
     purchase_date = db.Column(db.Date, nullable=False)
     cost = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(Enum('В эксплуатации', 'На ремонте', 'Списано', name='equipment_status'), nullable=False)
-    photo = db.Column(db.String(255))  # Store filename
-
-    responsible_persons = relationship("Person", secondary="equipment_person", back_populates="equipment") #связь с ответственными лицами
+    photo_id = db.Column(db.Integer, db.ForeignKey('photo.id'), nullable=True)
+    photo = relationship("Photo", backref="equipment")
+    created_at = db.Column(DateTime, default=datetime.utcnow)
+    responsible_persons = relationship("Person", secondary="equipment_person", back_populates="equipment")
 
     def __repr__(self):
         return f'<Equipment {self.name}>'
+
+
+class Photo(db.Model):
+    id = Column(Integer, primary_key=True)
+    filename = Column(String(255), nullable=False)
+    mime_type = Column(String(255), nullable=False)
+    md5_hash = Column(String(255), nullable=False)
+
+    def __repr__(self):
+        return f'<Photo {self.filename}>'
 
 
 class EquipmentPerson(db.Model):
@@ -78,13 +79,13 @@ class Person(db.Model):
         return f'<Person {self.full_name}>'
 
 
-class MaintenanceHistory(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=False)
-    equipment = relationship("Equipment", backref="maintenance_history") #связь с оборудованием
-    date = db.Column(db.DateTime, default=datetime.utcnow)
-    maintenance_type = db.Column(db.String(255), nullable=False)
-    comment = db.Column(db.Text)
+class Maintenance(db.Model):
+    id = Column(Integer, primary_key=True)
+    equipment_id = Column(Integer, ForeignKey('equipment.id'), nullable=False)
+    equipment = relationship("Equipment", backref="maintenances")
+    date = Column(DateTime, nullable=False)
+    type_of_maintenance = Column(String(255))  # "Ремонт", "Замена детали"
+    comment = Column(Text)
 
     def __repr__(self):
-        return f'<MaintenanceHistory {self.date}>'
+        return f'<Maintenance {self.date}>'

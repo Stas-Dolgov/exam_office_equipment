@@ -1,7 +1,9 @@
 Flask
 Flask-SQLAlchemy
+sqlalchemy
 Flask-Migrate
 Flask-WTF
+Flask_login
 WTForms
 python-dotenv 
 Pillow       
