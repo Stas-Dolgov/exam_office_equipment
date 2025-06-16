@@ -6,4 +6,11 @@ Flask-WTF
 Flask_login
 WTForms
 python-dotenv 
-Pillow       
+Pillow     
+
+Jinja2
+MarkupSafe
+python-dateutil
+six
+Werkzeug
+gunicorn
