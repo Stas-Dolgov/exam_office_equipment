@@ -12,36 +12,7 @@
             <p class="card-text">Цена: {{ equipment.cost }}</p>
             <p class="card-text">Статус: {{ equipment.status }}</p>
 
-            {% if equipment.photo %}
-                <img src="" alt="Фото оборудования" class="img-fluid">
-            {% endif %}
-
-            <!-- Кнопка и модальное окно для добавления записи об обслуживании (из предыдущего примера) -->
-            {% if current_user.is_authenticated and current_user.role.name == 'tech' %}
-                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">
-                    Добавить запись об обслуживании
-                </button>
-            {% endif %}
-
-            <!-- Модальное окно для добавления записи об обслуживании -->
-            <div class="modal fade" id="addMaintenanceModal" tabindex="-1" aria-labelledby="addMaintenanceModalLabel" aria-hidden="true">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="addMaintenanceModalLabel">Добавить запись об обслуживании</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <form method="POST" action="{{ url_for('add_maintenance_log', equipment_id=equipment.id) }}">
-                                <div class="mb-3">
-                                    <label for="comment" class="form-label">Комментарий</label>
-                                    <textarea class="form-control" id="comment" name="comment" rows="3" required></textarea>
-                                </div>
-                                <button type="submit" class="btn btn-primary">Сохранить</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <img src="url_for('static', filename=equipment.photo.filename)" alt="Фото оборудования" class="img-fluid">
 
                 <!-- Таблица с историей обслуживания -->
                 <h2>История обслуживания</h2>

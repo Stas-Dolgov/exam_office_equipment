@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, flash, request, current_app
+from flask import Flask, render_template, redirect, abort, url_for, flash, request, current_app, send_file, Response
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from datetime import datetime
 from flask_migrate import Migrate
@@ -8,6 +8,9 @@ from wtforms import StringField, PasswordField, BooleanField, SubmitField, Decim
 from wtforms.validators import DataRequired, Length, NumberRange
 from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
+from functools import wraps
+from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.dom import minidom
 import hashlib
 import os
 from config import Config
@@ -52,6 +55,27 @@ class EquipmentForm(FlaskForm):
     photo = FileField('Фото', validators=[FileAllowed(ALLOWED_EXTENSIONS)]) 
     new_photo = FileField('Загрузить новую фотографию', validators=[FileAllowed(['jpg', 'jpeg', 'png', 'gif'])])
     submit = SubmitField('Сохранить')
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            flash('Для выполнения данного действия необходимо пройти процедуру аутентификации.', 'warning')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def role_required(role):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated or current_user.role.name != role:
+                flash('У вас недостаточно прав для выполнения данного действия.', 'danger')
+                return redirect(url_for('index')) 
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 
 def generate_md5(filename):
@@ -159,6 +183,7 @@ def index():
 
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
+@role_required('admin')
 def add_equipment():
     if current_user.role != 'admin':
         flash('У вас недостаточно прав для выполнения данного действия', 'danger')
@@ -200,6 +225,7 @@ def add_equipment():
 
 @app.route('/delete/<int:equipment_id>', methods=['POST'])
 @login_required
+@role_required('admin')
 def equipment_delete(equipment_id):
     if current_user.role.name != 'admin':
         flash('У вас недостаточно прав для выполнения данного действия.', 'danger')
@@ -213,12 +239,16 @@ def equipment_delete(equipment_id):
 
 
 @app.route('/equipment/<int:equipment_id>')
+@login_required
+@role_required('admin')
 def equipment_detail(equipment_id):
     equipment = Equipment.query.get_or_404(equipment_id)
     return render_template('equipment_detail.html', equipment=equipment)
 
 
 @app.route('/equipment/<int:equipment_id>/add_maintenance_log', methods=['POST'])
+@login_required
+@role_required('tech')
 def add_maintenance_log(equipment_id):
     equipment = Equipment.query.get_or_404(equipment_id)
     comment = request.form.get('comment')
@@ -255,6 +285,10 @@ def fill_db():
 
         tech = User(username='user3', role=tech_role)
         user.set_password('йцукенгшщзх757575')
+        db.session.add(user)
+
+        tech = User(username='user5', role=tech_role)
+        user.set_password('hf8374')
         db.session.add(user)
 
         db.session.commit()
@@ -322,6 +356,46 @@ def edit_equipment(id):
 @app.route('/uploads/<filename>')
 def show_image(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+
+def export_equipment_to_xml():
+    equipment_list = Equipment.query.all()
+
+    root = Element('EquipmentList')
+    for equipment in equipment_list:
+        equipment_element = SubElement(root, 'Equipment')
+
+        name = SubElement(equipment_element, 'Name')
+        name.text = equipment.name
+
+        inventory_number = SubElement(equipment_element, 'InventoryNumber')
+        inventory_number.text = equipment.inventory_number
+
+        category = SubElement(equipment_element, 'Category')
+        category.text = equipment.category.name
+
+        purchase_date = SubElement(equipment_element, 'PurchaseDate')
+        purchase_date.text = equipment.purchase_date.strftime('%Y-%m-%d')
+
+        cost = SubElement(equipment_element, 'Cost')
+        cost.text = str(equipment.cost)
+
+        status = SubElement(equipment_element, 'Status')
+        status.text = equipment.status
+
+    xml_string = tostring(root, 'utf-8')
+    dom = minidom.parseString(xml_string)
+    pretty_xml_string = dom.toprettyxml()
+
+    return pretty_xml_string
+
+@app.route('/export_to_1c')
+def export_to_1c():
+    xml_data = export_equipment_to_xml()
+    response =  Response(xml_data, mimetype='text/xml')
+    response.headers['Content-Disposition'] = 'attachment; filename=equipment.xml'
+
+    return response
 
 
 if __name__ == '__main__':
